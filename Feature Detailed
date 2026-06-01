@@ -1,0 +1,320 @@
+# Ayush Gurung Feature Details
+
+This document explains your assigned features in detail, including backend models, DTOs, interfaces, services, and frontend components.
+
+## Assigned Features
+- Staff can register new customers with vehicle details
+- Staff can sell vehicle parts and create sales invoices
+- Loyalty Program: Customers get **10% discount** if they spend more than **5000** in a single purchase
+
+---
+
+## 1. Backend Overview
+
+### 1.1 Customer registration with vehicle details
+
+#### Backend controller
+- `backend-api/Controllers/StaffCustomersController.cs`
+  - Endpoint: `POST /api/staff/customers`
+  - Uses constructor injection: `StaffCustomersController(ICustomerService customerService)`
+  - Method: `Register(StaffCustomerCreateDto dto)`
+
+#### Interface and service
+- `backend-api/Services/Interfaces/ICustomerService.cs` (interface)
+- `backend-api/Services/CustomerService.cs` (implementation)
+  - Registers a new customer and creates associated vehicles
+  - Validates customer details and vehicle details
+  - Generates `CustomerCode`
+  - Links the new customer to an `ApplicationUser`
+
+#### DTOs used
+- `backend-api/DTOs/CustomerDtos.cs`
+  - `StaffCustomerCreateDto`
+  - `StaffVehicleCreateDto`
+  - `StaffCustomerCreatedDto`
+  - `CustomerVehicleDto`
+
+#### Models used
+- `backend-api/models/Customer.cs`
+  - Properties: `Id`, `UserId`, `CustomerCode`, `Phone`, `AddressLine`, `City`, `PostalCode`, `CreatedAt`
+  - Relationships: `User`, `Vehicles`, `SalesInvoices`, `ServiceAppointments`
+- `backend-api/models/Vehicle.cs`
+  - Properties: `Id`, `CustomerId`, `RegistrationNumber`, `Make`, `Model`, `ModelYear`, `Vin`, `OdometerKm`, `Color`, `Notes`
+
+#### How the backend operates
+1. Staff submits a form in the frontend.
+2. Frontend sends `CustomerCreateInput` to `/api/staff/customers`.
+3. `StaffCustomersController.Register` receives a `StaffCustomerCreateDto`.
+4. `customerService.RegisterAsync(dto)` handles business rules and saves the customer and vehicle records.
+5. New customer and vehicles are stored in `Customer` and `Vehicle` tables.
+
+---
+
+### 1.2 Selling parts and creating sales invoices
+
+#### Backend controller
+- `backend-api/Controllers/StaffSalesInvoicesController.cs`
+  - Endpoints:
+    - `GET /api/staff/sales-invoices`
+    - `GET /api/staff/sales-invoices/{id}`
+    - `POST /api/staff/sales-invoices`
+    - `PUT /api/staff/sales-invoices/{id}`
+    - `PATCH /api/staff/sales-invoices/{id}/payment`
+    - `DELETE /api/staff/sales-invoices/{id}`
+    - `POST /api/staff/sales-invoices/{id}/email`
+  - Uses DI: `StaffSalesInvoicesController(ISalesInvoiceService salesInvoiceService)`
+
+#### Interface
+- `backend-api/Services/Interfaces/ISalesInvoiceService.cs`
+  - `ListAsync(...)`
+  - `GetByIdAsync(int id)`
+  - `CreateAsync(SalesInvoiceCreateDto dto, string? createdByStaffId)`
+  - `UpdateAsync(int id, SalesInvoiceUpdateDto dto)`
+  - `RecordPaymentAsync(int id, RecordPaymentDto dto)`
+  - `DeleteAsync(int id)`
+  - `SendInvoiceEmailAsync(int id)`
+
+#### Service implementation
+- `backend-api/Services/SalesInvoiceService.cs`
+  - Validates line items, part stock, and appointment billing rules
+  - Applies loyalty discount when subtotal exceeds 5000
+  - Generates invoice numbers
+  - Saves `SalesInvoice` and `SalesLineItem` entities
+  - Handles payment recording and stock adjustment
+  - Sends invoice email using `_emailSender`
+
+#### DTOs used
+- `backend-api/DTOs/SalesInvoiceDtos.cs`
+  - `SalesInvoiceCreateDto`
+  - `SalesInvoiceUpdateDto`
+  - `SalesInvoiceLineItemInputDto`
+  - `SalesInvoiceDto`
+  - `SalesInvoiceListItemDto`
+  - `RecordPaymentDto`
+  - `SendInvoiceEmailResultDto`
+
+#### Models used
+- `backend-api/models/SalesInvoice.cs`
+  - Properties: `Id`, `CustomerId`, `InvoiceNumber`, `IssuedAt`, `SubTotal`, `ServiceChargeAmount`, `DiscountTotal`, `GrandTotal`, `LoyaltyDiscountApplied`, `PaymentStatus`, `PaymentMethod`, `AmountPaid`, `DueDate`, `CreatedByStaffId`, `Notes`, `ServiceAppointmentId`, `PartsStockDeducted`, `KhaltiPaymentIdx`
+  - Loyalty constants: `LoyaltyThreshold = 5000m`, `LoyaltyDiscountRate = 0.10m`
+  - Relationship: `Customer`, `CreatedByStaff`, `ServiceAppointment`, `LineItems`
+- `backend-api/models/SalesLineItem.cs`
+  - Properties: `Id`, `SalesInvoiceId`, `PartId`, `Quantity`, `UnitPrice`, `LineDiscount`, `LineTotal`
+- `backend-api/models/Part.cs`
+  - Properties: `Id`, `Sku`, `Name`, `UnitPrice`, `StockQuantity`, `ReorderLevel`, `IsActive`
+
+#### How invoice creation works
+1. Frontend sends `SalesInvoiceInput` to `POST /api/staff/sales-invoices`.
+2. `StaffSalesInvoicesController.Create` forwards the request to `SalesInvoiceService.CreateAsync(dto, createdByStaffId)`.
+3. In `CreateAsync`:
+   - Validates line items and stock for each selected part.
+   - Determines `unitPrice` by part or locked price.
+   - Calculates `lineTotal` and subtracts any line discounts.
+   - Adds `serviceChargeAmount`.
+   - Computes `subTotal = partsSubtotal + serviceChargeAmount`.
+   - Calls `ApplyLoyaltyDiscount(subTotal)`.
+   - Sets `grandTotal = subTotal - discountTotal`.
+   - Resolves `amountPaid`, `paymentStatus`, and `paymentMethod`.
+   - Creates `SalesInvoice` with `LineItems` and saves to database.
+   - Optionally deducts part stock immediately when the invoice is created.
+
+#### How payment works
+- `PATCH /api/staff/sales-invoices/{id}/payment` calls `RecordPaymentAsync`.
+- `RecordPaymentDto` holds `amountPaid` and `paymentMethod`.
+- In `RecordPaymentAsync`:
+  - Validates positive payment amount
+  - Updates `existing.AmountPaid`
+  - Sets payment status to `Paid`, `Partial`, or `Unpaid`
+  - If invoice is fully paid and stock was not yet deducted, deducts stock now
+
+#### Email invoice
+- `POST /api/staff/sales-invoices/{id}/email`
+- Calls `SalesInvoiceService.SendInvoiceEmailAsync(id)`
+- Renders invoice HTML and sends it through `_emailSender`
+
+---
+
+## 2. Loyalty Program Implementation
+
+### Where it is implemented
+- `backend-api/Services/SalesInvoiceService.cs`
+  - Method: `ApplyLoyaltyDiscount(decimal subTotal)`
+- `backend-api/models/SalesInvoice.cs`
+  - `LoyaltyThreshold = 5000m`
+  - `LoyaltyDiscountRate = 0.10m`
+
+### How it works
+- The service computes the invoice subtotal after part lines and service charge.
+- If `subTotal > 5000`, it calculates `discount = subTotal * 0.10`.
+- The discount is rounded with `MidpointRounding.AwayFromZero`.
+- The invoice’s final `GrandTotal` becomes `subTotal - discount`.
+- The DTOs carry `DiscountTotal` and `LoyaltyDiscountApplied` back to the frontend.
+
+### Why it is part of your feature
+- This is the exact loyalty rule you own: 10% discount when a single purchase exceeds 5000.
+- It is applied automatically in invoice creation and shown in invoice details.
+
+---
+
+## 3. Frontend Implementation
+
+### 3.1 Register new customer with vehicles
+
+#### Page
+- `frontend/AutoSpare/src/pages/staff/customers/CustomerRegisterPage.tsx`
+  - Uses `createCustomerWithVehicles` to submit a staff-created customer.
+  - Includes form fields for customer info and one or more vehicles.
+  - Validates registration number and password rules on the client.
+  - Displays newly created customer and vehicles after success.
+
+#### Frontend service
+- `frontend/AutoSpare/src/services/customerService.ts`
+  - `createCustomerWithVehicles(payload: CustomerCreateInput)`
+  - Sends `POST /api/staff/customers`
+
+#### Frontend DTO/types
+- `frontend/AutoSpare/src/types/staff/customer.ts`
+  - `CustomerCreateInput`
+  - `VehicleInput`
+  - `CustomerCreatedResult`
+  - `CustomerVehicle`
+
+#### Key frontend flow
+1. Staff fills `CustomerRegisterPage` form.
+2. The form builds payload with `vehicles: VehicleInput[]`.
+3. The frontend calls `createCustomerWithVehicles(payload)`.
+4. Backend returns `CustomerCreatedResult` with created customer and vehicles.
+5. UI shows success and registered vehicle data.
+
+---
+
+### 3.2 Sales invoice creation and payment
+
+#### Frontend pages
+- `frontend/AutoSpare/src/pages/staff/sales-invoices/SalesInvoiceCreatePage.tsx`
+  - Renders `SalesInvoiceForm` and sends create request on submit.
+- `frontend/AutoSpare/src/pages/staff/sales-invoices/SalesInvoiceEditPage.tsx`
+  - Uses same `SalesInvoiceForm` for editing existing invoices.
+- `frontend/AutoSpare/src/pages/staff/sales-invoices/SalesInvoiceDetailsPage.tsx`
+  - Displays invoice details, loyalty discount, invoice email button, payment form, and delete action.
+- `frontend/AutoSpare/src/pages/staff/sales-invoices/SalesInvoiceListPage.tsx`
+  - Lists invoices and uses pagination.
+
+#### Invoice form component
+- `frontend/AutoSpare/src/pages/staff/sales-invoices/SalesInvoiceForm.tsx`
+  - Customer selector
+  - Optional service appointment selector
+  - Service charge input
+  - Line item list where each item selects a part and quantity
+  - Payment status and payment method fields
+  - Amount paid value is synchronized with paid/unpaid selections
+  - Validates entries before sending request
+
+#### Frontend service
+- `frontend/AutoSpare/src/services/salesInvoiceService.ts`
+  - `listSalesInvoices(filters)` → `GET /api/staff/sales-invoices`
+  - `getSalesInvoice(id)` → `GET /api/staff/sales-invoices/{id}`
+  - `createSalesInvoice(payload)` → `POST /api/staff/sales-invoices`
+  - `updateSalesInvoice(id, payload)` → `PUT /api/staff/sales-invoices/{id}`
+  - `recordSalesInvoicePayment(id, payload)` → `PATCH /api/staff/sales-invoices/{id}/payment`
+  - `emailSalesInvoice(id)` → `POST /api/staff/sales-invoices/{id}/email`
+  - `listStaffParts(query, page, pageSize)` → `GET /api/staff/parts`
+
+#### Frontend types
+- `frontend/AutoSpare/src/types/staff/salesInvoice.ts`
+  - `SalesInvoiceInput`
+  - `SalesInvoiceLineItemInput`
+  - `SalesInvoiceListItem`
+  - `SalesInvoice`
+  - `PaymentStatus`
+  - `PaymentMethod`
+  - `SalesInvoiceFilters`
+
+#### Example frontend flow for invoice creation
+1. Staff picks a customer and optionally a completed service appointment.
+2. Staff adds parts as line items and enters quantity/discount.
+3. Staff optionally adds a service charge.
+4. Staff chooses payment status (Paid / Partial / Unpaid) and method.
+5. The frontend calls `createSalesInvoice(payload)`.
+6. The backend returns the created invoice as `SalesInvoice`.
+7. The UI can then show loyalty discount status and payment summary.
+
+---
+
+## 4. Payment and loyalty details
+
+### Payment fields and rules
+- Backend DTO: `RecordPaymentDto` and `SalesInvoiceCreateDto`
+- `SalesInvoiceCreateDto` includes:
+  - `PaymentStatus` (Paid / Unpaid / Partial)
+  - `PaymentMethod?`
+  - `AmountPaid`
+  - `DueDate`
+- `RecordPaymentDto` includes:
+  - `AmountPaid`
+  - `PaymentMethod`
+
+### Backend payment processing
+- `SalesInvoiceService.CreateAsync` resolves final amount and status using helper methods:
+  - `ResolveAmountPaid(...)`
+  - `ResolvePaymentStatus(...)`
+  - `ResolvePersistedPaymentMethod(...)`
+- `SalesInvoiceService.RecordPaymentAsync` updates balance and status after a payment.
+- If the invoice becomes fully paid and stock is not yet deducted, it deducts stock at this time.
+
+### Loyalty discount behavior
+- `ApplyLoyaltyDiscount(subTotal)` returns a discount only when `subTotal > 5000`.
+- Discount amount is `subTotal * 0.10`.
+- Discount is stored in `SalesInvoice.DiscountTotal` and shown as `LoyaltyDiscountApplied`.
+
+---
+
+## 5. Important code locations
+
+### Backend
+- Controllers:
+  - `backend-api/Controllers/StaffCustomersController.cs`
+  - `backend-api/Controllers/StaffSalesInvoicesController.cs`
+- Services:
+  - `backend-api/Services/CustomerService.cs`
+  - `backend-api/Services/SalesInvoiceService.cs`
+- Interfaces:
+  - `backend-api/Services/Interfaces/ICustomerService.cs`
+  - `backend-api/Services/Interfaces/ISalesInvoiceService.cs`
+- DTOs:
+  - `backend-api/DTOs/CustomerDtos.cs`
+  - `backend-api/DTOs/SalesInvoiceDtos.cs`
+- Models:
+  - `backend-api/models/Customer.cs`
+  - `backend-api/models/Vehicle.cs`
+  - `backend-api/models/SalesInvoice.cs`
+  - `backend-api/models/SalesLineItem.cs`
+  - `backend-api/models/Part.cs`
+
+### Frontend
+- Pages:
+  - `frontend/AutoSpare/src/pages/staff/customers/CustomerRegisterPage.tsx`
+  - `frontend/AutoSpare/src/pages/staff/sales-invoices/SalesInvoiceCreatePage.tsx`
+  - `frontend/AutoSpare/src/pages/staff/sales-invoices/SalesInvoiceForm.tsx`
+  - `frontend/AutoSpare/src/pages/staff/sales-invoices/SalesInvoiceDetailsPage.tsx`
+  - `frontend/AutoSpare/src/pages/staff/sales-invoices/SalesInvoiceListPage.tsx`
+- Services:
+  - `frontend/AutoSpare/src/services/customerService.ts`
+  - `frontend/AutoSpare/src/services/salesInvoiceService.ts`
+- Types:
+  - `frontend/AutoSpare/src/types/staff/customer.ts`
+  - `frontend/AutoSpare/src/types/staff/salesInvoice.ts`
+
+---
+
+## 6. Summary
+Your assigned features are implemented with:
+- **Backend controllers** for staff APIs
+- **Service interfaces** (`ICustomerService`, `ISalesInvoiceService`) to separate business logic
+- **DTOs** for request validation and response payloads
+- **Models** for customers, vehicles, parts, invoices, and invoice line items
+- **Frontend forms/pages** that call backend APIs via service functions
+- **Loyalty discount logic** inside `SalesInvoiceService` using `SalesInvoice.LoyaltyThreshold`
+- **Payment handling** via invoice creation and payment patch endpoints
+
+This file captures the full end-to-end flow and the exact code files used by your part of the system.
