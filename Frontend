@@ -1,0 +1,98 @@
+# Frontend Overview for AutoSpare
+
+## 1. Tech stack
+
+- React 19
+- TypeScript
+- Vite as the build and dev server
+- React Router DOM for SPA routing
+- Tailwind CSS for styling
+- Sonner for toast notifications
+
+## 2. What Vite is
+
+- Vite is the tool that starts the frontend app in development and bundles it for production.
+- It is faster than older tools because it serves modern JS modules directly in dev.
+- The `package.json` scripts use Vite:
+  - `npm run dev` → starts the dev server
+  - `npm run build` → builds static files
+  - `npm run preview` → previews the production build
+- `vite.config.ts` configures plugins and a proxy for API calls.
+
+## 3. How the frontend uses backend API endpoints
+
+- The code sends HTTP requests through `src/services/http.ts`.
+- `getApiBaseUrl()` chooses the API base URL:
+  - In development: calls same-origin `/api`, which Vite forwards to `http://localhost:5033`
+  - In production: defaults to `http://localhost:5033`
+- Every service file calls `requestJson()` or `requestMultipart()`.
+- Example path usage:
+  - `requestJson('/api/auth/login', { method: 'POST', body: JSON.stringify(...) })`
+  - `requestJson('/api/customer/vehicles')`
+- This means frontend code uses the same backend endpoints defined in controllers like `AuthController.cs`.
+
+## 4. Vite proxy behavior
+
+- The proxy in `vite.config.ts` forwards these paths to the backend in dev:
+  - `/api` → `http://localhost:5033`
+  - `/uploads` → `http://localhost:5033`
+  - `/ai` → `http://127.0.0.1:8000`
+- This lets the frontend call backend APIs without CORS issues while developing.
+
+## 5. Main frontend folders
+
+- `src/`
+  - `App.tsx` - main app router and route definitions
+  - `main.tsx` - app entry point that mounts React into the page
+  - `index.css` - global styles
+- `src/components/` - reusable UI pieces and route guards
+  - `ProtectedRoute.tsx` - checks login and roles before allowing access
+- `src/pages/` - individual pages and screens for admin, staff, customer, and shop
+- `src/services/` - API client code and business service wrappers
+  - `http.ts` - shared request helper
+  - `authService.ts` - login/register calls
+  - `customerService.ts` - customer-related backend calls
+  - `partsService.ts` - parts catalog calls
+- `src/hooks/` - custom hooks for auth and storage
+- `src/types/` - TypeScript data shapes used across the app
+
+## 6. How pages are organized
+
+- `src/App.tsx` defines all routes.
+- Public pages:
+  - `/` home
+  - `/login`
+  - `/register`
+  - `/shop`
+  - `/shop/:partId`
+- Protected dashboards are wrapped in `ProtectedRoute` and require roles:
+  - `/dashboard/admin/...`
+  - `/dashboard/staff/...`
+  - `/dashboard/customer/...`
+
+## 7. How auth is handled in frontend
+
+- Auth data is stored in local storage using `src/hooks/useAuthStorage.ts`.
+- `ProtectedRoute.tsx` checks for a saved token and user roles.
+- If the token is missing or the role is wrong, it redirects to `/login` or the right dashboard.
+
+## 8. Simple summary of frontend flow
+
+1. Browser loads the app via `index.html`.
+2. `src/main.tsx` mounts `<App />`.
+3. `<App />` reads the route and renders a page component.
+4. Page components call service functions in `src/services/`.
+5. Services call the backend through `src/services/http.ts`.
+6. Backend controller endpoints handle the request and return JSON.
+
+## 9. Key files to inspect
+
+- `frontend/AutoSpare/package.json` - frontend dependencies and scripts
+- `frontend/AutoSpare/vite.config.ts` - Vite config and API proxy
+- `frontend/AutoSpare/src/main.tsx` - app entry point
+- `frontend/AutoSpare/src/App.tsx` - route definitions
+- `frontend/AutoSpare/src/services/http.ts` - API fetch helper
+- `frontend/AutoSpare/src/components/ProtectedRoute.tsx` - auth guard
+- `frontend/AutoSpare/src/services/authService.ts` - login/register API calls
+
+That is the simple frontend logic and how it connects to the backend APIs.
