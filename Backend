@@ -1,0 +1,105 @@
+# Backend Overview for AutoSpare
+
+## 1. Simple workflow
+
+1. The application starts in `backend-api/Program.cs`.
+2. `Program.cs` configures services, authentication, database, and controllers.
+3. Requests go to controller classes in `backend-api/Controllers/`.
+4. Controllers use services, DTOs, and models to perform logic.
+5. Responses are returned as JSON.
+
+## 2. What `Program.cs` does
+
+- Registers the database context: `AddDbContext<AppDbContext>(...)`
+- Adds MVC controllers: `AddControllers()`
+- Configures JSON serialization and validation behavior
+- Adds Swagger/OpenAPI for API documentation
+- Registers authentication with JWT
+- Defines dependency injection for interfaces and services
+- Builds and runs the application
+
+## 3. Where the API endpoints are
+
+The API endpoints live in controller files under:
+
+- `backend-api/Controllers/`
+
+Each controller uses a route like:
+
+- `AuthController.cs` -> `[Route("api/auth")]`
+- `CustomerPartsController.cs` -> likely `[Route("api/customer/parts")]` or similar
+
+Example endpoint paths in `AuthController.cs`:
+
+- `POST api/auth/register-customer`
+- `POST api/auth/login`
+- `POST api/auth/logout`
+- `GET api/auth/confirm-email`
+- `POST api/auth/resend-confirmation`
+
+## 4. What controllers do
+
+A controller is a class that receives HTTP requests and returns HTTP responses.
+
+- It is marked with `[ApiController]` and `[Route(...)]`.
+- Each method inside is an endpoint: `[HttpGet]`, `[HttpPost]`, etc.
+- Controllers coordinate work by calling services or database code.
+
+## 5. What interfaces do
+
+Interfaces are contracts for behavior.
+
+- Example: `IEmailSender`, `ICustomerService`, `IPartService`
+- They define methods without implementation.
+- `Program.cs` connects interface to an implementation: `AddScoped<IEmailSender, SmtpEmailSender>()`
+- This means: “when code asks for `IEmailSender`, give it `SmtpEmailSender`”.
+
+Why use interfaces?
+
+- Makes code easier to test.
+- Lets controllers depend on behavior, not concrete classes.
+- Supports swapping implementations later.
+
+## 6. What `IFormFile` is
+
+`IFormFile` is a .NET interface for uploaded files.
+
+- It appears in controller actions when a user uploads a file.
+- It provides file name, content type, and stream access.
+- It is not specific to this project, but is a common part of ASP.NET Core.
+
+## 7. How the system operates in simple terms
+
+- Client sends an HTTP request (browser, app, or frontend).
+- The request reaches the backend and matches a controller route.
+- Controller method runs and may validate input.
+- Controller calls a service or database code.
+- Service code does business logic, such as reading/writing data.
+- Controller returns JSON result.
+
+## 8. Important folders and their roles
+
+- `Controllers/` - API endpoints and routes
+- `Data/` - database context and migrations
+- `DTOs/` - data transfer objects for request and response payloads
+- `Models/` - entity classes stored in the database
+- `Services/` - business logic implementations
+- `Services/Interfaces/` - interface definitions for services
+
+## 9. Good file examples to read
+
+- `Program.cs` — backend startup and service wiring
+- `Controllers/AuthController.cs` — authentication endpoints
+- `Controllers/CustomerPartsController.cs` — customer part-related endpoints
+- `Services/Interfaces/ICustomerService.cs` — service contract
+- `Services/CustomerService.cs` — implementation of service logic
+
+## 10. In the simplest terms
+
+- `Program.cs` starts the app and registers components.
+- `Controllers` define the API routes.
+- `Interfaces` declare what services can do.
+- `Services` actually do the work.
+- `IFormFile` is used for file uploads.
+
+That is the basic backend flow and where to find the endpoints.
