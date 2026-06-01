@@ -1,0 +1,123 @@
+# Ayush Gurung: Task Implementation Overview
+
+This document details the implementation of the features assigned to Ayush Gurung, covering both backend and frontend aspects, with references to relevant files, classes, and concepts used in the project.
+
+## Features Assigned
+- Staff can register new customers with vehicle details
+- Staff can sell vehicle parts and create sales invoices
+- Loyalty Program: Customers get 10% discount if they spend more than 5000 in a single purchase
+
+---
+
+## 1. Customer Registration (with Vehicle Details)
+
+### Backend
+- **Controller:** `StaffCustomersController.cs`
+- **DTOs:** `CustomerDtos.cs`, `VehicleMaintenanceAiDtos.cs`
+- **Models:** Likely in `models/` (e.g., `Customer`, `Vehicle`)
+- **Process:**
+  - Staff submits customer and vehicle info via API endpoint.
+  - Controller validates and passes data to service layer.
+  - Data is mapped from DTOs to models and saved to the database.
+- **OOP Concepts:**
+  - **Encapsulation:** DTOs and models encapsulate data.
+  - **Abstraction:** Service layer abstracts business logic.
+  - **Dependency Injection:** Services are injected into controllers.
+
+### Frontend
+- **Location:** Likely in `frontend/AutoSpare/`
+- **UI:** Staff form for entering customer and vehicle details.
+- **API Call:** Sends POST request to backend endpoint for registration.
+
+---
+
+## 2. Selling Vehicle Parts & Creating Sales Invoices
+
+### Backend
+- **Controller:** `StaffPartsController.cs`, `StaffSalesInvoicesController.cs`
+- **DTOs:** `PartDtos.cs`, `SalesInvoiceDtos.cs`
+- **Models:** `Part`, `SalesInvoice`, `InvoiceItem` (in `models/`)
+- **Process:**
+  - Staff selects parts and customer, creates invoice via API.
+  - Controller handles request, applies business logic (e.g., stock check, price calculation).
+  - Invoice and items are saved to the database.
+- **OOP Concepts:**
+  - **Inheritance:** Invoice items may inherit from a base class.
+  - **Polymorphism:** Different invoice types handled via interfaces or base classes.
+  - **Dependency Injection:** Services for parts and invoices injected into controllers.
+
+### Frontend
+- **Location:** `frontend/AutoSpare/`
+- **UI:** Staff selects parts, customer, and confirms sale.
+- **API Call:** Sends POST request to create invoice and process sale.
+
+---
+
+## 3. Loyalty Program (10% Discount for Purchases > 5000)
+
+### Backend
+- **Controller:** `StaffSalesInvoicesController.cs`
+- **DTOs:** `SalesInvoiceDtos.cs`
+- **Logic:**
+  - When creating an invoice, backend checks if total > 5000.
+  - If so, applies 10% discount before saving invoice.
+  - Discount logic is implemented in service/business layer.
+- **OOP Concepts:**
+  - **Encapsulation:** Discount logic encapsulated in service.
+  - **Abstraction:** Controller does not handle discount logic directly.
+
+### Frontend
+- **UI:** Shows discount applied if eligible.
+- **API Call:** Receives discounted total from backend.
+
+---
+
+## 4. Payment Implementation
+
+### Backend
+- **Controller:** `CustomerPaymentsController.cs`, `StaffSalesInvoicesController.cs`
+- **DTOs:** `SalesInvoiceDtos.cs`, `CustomerDtos.cs`
+- **Process:**
+  - After invoice creation, payment endpoint is called.
+  - Payment status is updated in the database.
+  - Loyalty discount is only applied if payment is successful.
+
+### Frontend
+- **UI:** Payment form/modal after invoice creation.
+- **API Call:** Sends payment details to backend, receives confirmation.
+
+---
+
+## 5. System Concepts
+
+### OOP Four Pillars
+- **Encapsulation:** DTOs, models, and services encapsulate data and logic.
+- **Abstraction:** Controllers use services/interfaces to abstract business logic.
+- **Inheritance:** Common base classes for entities (e.g., `Person`, `InvoiceItem`).
+- **Polymorphism:** Interfaces for services, allowing different implementations.
+
+### C# Concepts
+- **Dependency Injection:** Used throughout controllers for services (via constructor injection).
+- **DTOs:** Used for data transfer between frontend and backend.
+- **Interfaces:** Service interfaces define contracts for business logic.
+
+---
+
+## File References
+- **Controllers:**
+  - `backend-api/Controllers/StaffCustomersController.cs`
+  - `backend-api/Controllers/StaffPartsController.cs`
+  - `backend-api/Controllers/StaffSalesInvoicesController.cs`
+  - `backend-api/Controllers/CustomerPaymentsController.cs`
+- **DTOs:**
+  - `backend-api/DTOs/CustomerDtos.cs`
+  - `backend-api/DTOs/VehicleMaintenanceAiDtos.cs`
+  - `backend-api/DTOs/PartDtos.cs`
+  - `backend-api/DTOs/SalesInvoiceDtos.cs`
+- **Frontend:**
+  - `frontend/AutoSpare/` (UI forms, API calls)
+
+---
+
+## Summary
+This document provides a detailed mapping of the assigned features to the relevant backend and frontend code, with explanations of the system design and C# concepts used. For further details, refer to the specific files listed above.
